@@ -82,3 +82,17 @@ dependencies {
     implementation 'com.appsflyer:af-android-sdk:6.8.2'
     implementation 'com.appsflyer:adrevenue:6.4.3'
 }
+
+afterEvaluate {
+    publishing {
+        publications {
+            // Creates a Maven publication called "release".
+            release(MavenPublication) {
+                from components.release
+                groupId = 'com.github.samson2816'
+                artifactId = 'LibAdmob'
+                version = '1.0.0'
+            }
+        }
+    }
+}
