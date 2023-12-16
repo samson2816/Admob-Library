@@ -32,8 +32,8 @@ import com.adjust.sdk.OnSessionTrackingSucceededListener;
 import com.ads.control.R;
 import com.ads.control.admob.Admob;
 import com.ads.control.admob.AppOpenManager;
-import com.ads.control.ads.nativeAds.AdUtilsPlacer;
 import com.ads.control.ads.nativeAds.AdUtilsAdapter;
+import com.ads.control.ads.nativeAds.AdUtilsPlacer;
 import com.ads.control.ads.wrapper.ApAdError;
 import com.ads.control.ads.wrapper.ApAdValue;
 import com.ads.control.ads.wrapper.ApInterstitialAd;
@@ -73,6 +73,8 @@ import com.google.android.gms.ads.rewarded.RewardItem;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewardedinterstitial.RewardedInterstitialAd;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 public class AdUtils {
     public static final String TAG_ADJUST = "AdUtilsAdjust";
     public static final String TAG = "AdUtils";
@@ -80,6 +82,9 @@ public class AdUtils {
     private AdUtilsConfig adConfig;
     private AdUtilsInitCallback initCallback;
     private Boolean initAdSuccess = false;
+    private Application application;
+    private boolean enableDebugMediation = false;
+    private final AtomicBoolean isMobileAdsInitializeCalled = new AtomicBoolean(false);
 
     public static synchronized AdUtils getInstance() {
         if (INSTANCE == null) {
@@ -125,9 +130,11 @@ public class AdUtils {
      */
     public void init(Application context, AdUtilsConfig adConfig, Boolean enableDebugMediation) {
         if (adConfig == null) {
-            throw new RuntimeException("cant not set AdUtilsConfig null");
+            throw new RuntimeException("Cant not set GamAdConfig null");
         }
+        this.application = context;
         this.adConfig = adConfig;
+        this.enableDebugMediation = enableDebugMediation;
         AppUtil.VARIANT_DEV = adConfig.isVariantDev();
         Log.i(TAG, "Config variant dev: " + AppUtil.VARIANT_DEV);
         if (adConfig.isEnableAppsflyer()) {
@@ -140,33 +147,44 @@ public class AdUtils {
             AdUtilsAdjust.enableAdjust = true;
             setupAdjust(adConfig.isVariantDev(), adConfig.getAdjustConfig().getAdjustToken());
         }
-        switch (adConfig.getMediationProvider()) {
-            case AdUtilsConfig.PROVIDER_MAX:
-                AppLovin.getInstance().init(context, new AppLovinCallback() {
-                    @Override
-                    public void initAppLovinSuccess() {
-                        super.initAppLovinSuccess();
-                        initAdSuccess = true;
-                        if (initCallback != null)
-                            initCallback.initAdSuccess();
-                        if (adConfig.isEnableAdResume()) {
-                            AppOpenMax.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
-                        }
-                    }
-                }, enableDebugMediation);
-                break;
-            case AdUtilsConfig.PROVIDER_ADMOB:
-                Admob.getInstance().init(context, adConfig.getListDeviceTest());
-                if (adConfig.isEnableAdResume())
-                    AppOpenManager.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
-
-                initAdSuccess = true;
-                if (initCallback != null)
-                    initCallback.initAdSuccess();
-                break;
-        }
         FacebookSdk.setClientToken(adConfig.getFacebookClientToken());
         FacebookSdk.sdkInitialize(context);
+    }
+
+    public void initAdsNetwork() {
+        if (isMobileAdsInitializeCalled.getAndSet(true)) {
+            Log.d(TAG, "initAdsNetwork: vao 1");
+            return;
+        } else {
+            switch (adConfig.getMediationProvider()) {
+                case AdUtilsConfig.PROVIDER_MAX:
+                    Log.d(TAG, "initAdsNetwork: init AppLovin");
+                    AppLovin.getInstance().init(application, new AppLovinCallback() {
+                        @Override
+                        public void initAppLovinSuccess() {
+                            super.initAppLovinSuccess();
+                            initAdSuccess = true;
+                            if (initCallback != null)
+                                initCallback.initAdSuccess();
+                            if (adConfig.isEnableAdResume()) {
+                                AppOpenMax.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
+                            }
+                        }
+                    }, enableDebugMediation);
+                    break;
+                case AdUtilsConfig.PROVIDER_ADMOB:
+                    Log.d(TAG, "initAdsNetwork: init Admob");
+                    Admob.getInstance().init(application, adConfig.getListDeviceTest());
+                    if (adConfig.isEnableAdResume())
+                        AppOpenManager.getInstance().init(adConfig.getApplication(), adConfig.getIdAdResume());
+
+                    initAdSuccess = true;
+                    if (initCallback != null)
+                        initCallback.initAdSuccess();
+                    break;
+            }
+            Log.d(TAG, "initAdsNetwork: vao 2");
+        }
     }
 
     public int getMediationProvider() {
